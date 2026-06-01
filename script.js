@@ -403,10 +403,12 @@ function loadCardBg(card){
     card.style.backgroundSize='cover';card.style.backgroundPosition='center';card.style.backgroundRepeat='no-repeat';
     card.classList.add('bg-loaded');
   }
+  // Cache hit
   if(IMG_CACHE.has(url)){ if(IMG_CACHE.get(url))applyBg(url);else applyBg(FALLBACK_FILE);return }
+  // Validate
   const img=new Image();
-  img.onload=()=>{IMG_CACHE.set(url,true);applyBg(url)};
-  img.onerror=()=>{IMG_CACHE.set(url,false);const fb=new Image();fb.onload=()=>applyBg(FALLBACK_FILE);fb.onerror=()=>applyBg(FALLBACK_INLINE);fb.src=FALLBACK_FILE};
+  img.onload=()=>{IMG_CACHE.set(url,true);applyBg(url);img.onload=img.onerror=null};
+  img.onerror=()=>{IMG_CACHE.set(url,false);img.onload=img.onerror=null;applyBg(FALLBACK_FILE)};
   img.src=url;
 }
 
