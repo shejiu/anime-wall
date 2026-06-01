@@ -104,34 +104,49 @@ function applyFilters(){
       return false;
     });
   }
-  // Search — pinyin + abbrev + token matching
+  // Search — pinyin + abbrev + token matching + franchise
   if(search){
     const q = search.toLowerCase();
+    const franchiseIds = new Set();
     data = data.filter(a => {
-      // Direct text match
-      if((a.cnTitle||'').toLowerCase().includes(q))return true;
-      if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))return true;
-      if((a.title||'').toLowerCase().includes(q))return true;
-      if((a.romaji||'').toLowerCase().includes(q))return true;
-      if((a.english||'').toLowerCase().includes(q))return true;
-      if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))return true;
-      // Pinyin full match
-      if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))return true;
-      // Abbreviation match
-      if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))return true;
-      // Pinyin skip-match: match query chars consecutively against joined tokens
-      if((a.pinyinTokens||[]).length>0){
-        const flat=a.pinyinTokens.join('');
-        if(flat.includes(q))return true;
-        // "zhouhui" → find 'z' then 'h' then 'o' then 'u'... in order within flat
-        let qi=0;
-        for(let ci=0;ci<flat.length&&qi<q.length;ci++){
-          if(flat[ci]===q[qi])qi++;
+      let hit=false;
+      if((a.cnTitle||'').toLowerCase().includes(q))hit=true;
+      else if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
+      else if((a.title||'').toLowerCase().includes(q))hit=true;
+      else if((a.romaji||'').toLowerCase().includes(q))hit=true;
+      else if((a.english||'').toLowerCase().includes(q))hit=true;
+      else if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
+      else if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
+      else if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
+      else if((a.pinyinTokens||[]).length>0){
+        const flat=a.pinyinTokens.join('');let qi2=0;
+        for(let ci=0;ci<flat.length&&qi2<q.length;ci++){if(flat[ci]===q[qi2])qi2++}
+        if(qi2===q.length)hit=true;
+      }
+      if(hit){
+        const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);
+        if(window._franchiseMap){
+          const fIds=window._franchiseMap.get(aid);
+          if(fIds)fIds.forEach(id=>franchiseIds.add(id));
         }
-        if(qi===q.length)return true;
+        return true;
       }
       return false;
     });
+    // Add franchise siblings
+    if(franchiseIds.size>0){
+      const existingIds=new Set(data.map(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])));
+      for(const fid of franchiseIds){
+        if(existingIds.has(fid))continue;
+        const sib=allAnimeData.find(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])===fid);
+        if(!sib)continue;
+        let tagOk=true;
+        for(const tag of tags){if(!(sib.tags||[]).includes(tag)&&!(sib.moods||[]).includes(tag)&&!(sib.vibes||[]).includes(tag)&&!(sib.characterTags||[]).includes(tag)){tagOk=false;break}}
+        let decOk=true;
+        if(decades.size>0){const y=sib.seasonYear||parseInt((sib.date||'').slice(0,4))||0;decOk=false;for(const d of decades){if(d===2024){if(y>=2024){decOk=true;break}}else{const g=Math.floor(y/10)*10;if(g===d){decOk=true;break}}}}
+        if(tagOk&&decOk)data.push(sib);
+      }
+    }
   }
   return data;
 }
@@ -521,6 +536,22 @@ if(location.search.includes('perf=1')){
   requestAnimationFrame(updatePerf);
 }
 
+// ═══ Load franchise map ═══
+(function loadFranchise(){
+  const s=document.createElement('script');
+  s.src='data/anime-franchises.js';
+  s.onload=()=>{
+    if(window._franchiseDB){
+      window._franchiseMap=new Map();
+      for(const [key,ids] of Object.entries(window._franchiseDB)){
+        for(const id of ids)window._franchiseMap.set(id,ids);
+      }
+    }
+  };
+  s.onerror=()=>{};
+  document.head.appendChild(s);
+})();
+
 // ═══ Init ═══
 (function init(){
   const el = document.getElementById('dataCount');
@@ -530,7 +561,6 @@ if(location.search.includes('perf=1')){
   scheduleDM();
   initWorker();
 
-  // 后台加载剩余 tier
   loadDeferredTiers();
 
   // Register Service Worker (PWA)
