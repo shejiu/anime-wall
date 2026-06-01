@@ -7,6 +7,7 @@ const DATA_DIR=path.join(__dirname,'..','data');
 const TIERS=['top-rated.js','mainstream.js','niche.js','low-rated.js'];
 // Load community alias database
 const ALIAS_DB=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','anime-aliases.json'),'utf8'));
+const FRANCHISE_DB=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','anime-franchises.json'),'utf8'));
 
 // Minimal pinyin map for common Chinese chars (covers 99% of use)
 const PY_MAP={
@@ -162,9 +163,16 @@ for(const file of TIERS){
     if(canon.length<2)canon=a.title||'';
     a.canonicalTitle=canon;
 
-    // franchiseKey from explicit DB
-    a.franchiseKey=null;
-    if(adb){a.franchiseKey=aid;}
+    // franchiseKey + canonicalFranchise from explicit DB
+    a.franchiseKey=null;a.canonicalFranchise=null;
+    // Find which franchise this ID belongs to
+    for(const [fName,fIds] of Object.entries(FRANCHISE_DB)){
+      if(fIds.includes(parseInt(aid))){
+        a.franchiseKey=aid;a.canonicalFranchise=fName;
+        break;
+      }
+    }
+    if(!a.canonicalFranchise)a.canonicalFranchise=a.cnTitle||a.canonicalTitle||a.title||null;
 
     // searchTokens: all searchable tokens pre-lowercased
     const rawTokens=[];

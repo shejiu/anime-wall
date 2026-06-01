@@ -104,70 +104,53 @@ function applyFilters(){
       return false;
     });
   }
-  // Search — weighted scoring + franchise booster
+  // Search — strict weights + 2-phase franchise
   if(search){
     const q = search.toLowerCase();
-    const qTokens = q.split(/[\s・\-:]+/).filter(t=>t.length>=1);
 
-    // Phase 1: Check franchise match
-    const matchedFranchiseIds = new Set();
-    if(window._franchiseDB){
-      for(const [fKey, fIds] of Object.entries(window._franchiseDB)){
-        if(fKey.toLowerCase().includes(q) || q.includes(fKey.toLowerCase())){
-          fIds.forEach(id => matchedFranchiseIds.add(id));
-        }
+    // Score function (same weights as worker)
+    function scoreA(a){
+      let s=0;
+      if((a.cnTitle||'').toLowerCase()===q)s+=120;
+      else if((a.cnTitle||'').toLowerCase().includes(q))s+=80;
+      if((a.canonicalFranchise||'').toLowerCase()===q)s+=80;
+      if((a.title||'').toLowerCase()===q)s+=100;
+      else if((a.title||'').toLowerCase().includes(q))s+=60;
+      if((a.aliases||[]).some(t=>t.toLowerCase()===q))s+=60;
+      else if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))s+=40;
+      if((a.romaji||'').toLowerCase().includes(q))s+=30;
+      if((a.english||'').toLowerCase().includes(q))s+=25;
+      if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))s+=20;
+      if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))s+=15;
+      if((a.pinyinTokens||[]).length>0){
+        const flat=a.pinyinTokens.join('');let qi=0;
+        for(let ci=0;ci<flat.length&&qi<q.length;ci++){if(flat[ci]===q[qi])qi++}
+        if(qi===q.length)s+=18;
+      }
+      if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))s+=1;
+      return s;
+    }
+
+    const scored=data.map(a=>({a,score:scoreA(a)}));
+
+    // Franchise expansion (only if primary score >= 80)
+    const franchiseExpand=new Set();
+    for(const item of scored){
+      if(item.score>=80&&item.a.canonicalFranchise)franchiseExpand.add(item.a.canonicalFranchise);
+    }
+    if(franchiseExpand.size>0){
+      for(const item of scored){
+        if(item.score<80&&item.a.canonicalFranchise&&franchiseExpand.has(item.a.canonicalFranchise))item.score+=35;
       }
     }
 
-    if(matchedFranchiseIds.size > 0){
-      // Franchise match: return only franchise entries (sorted by score)
-      data = data.filter(a => matchedFranchiseIds.has(parseInt(a.link.match(/anime\/(\d+)/)[1])));
-      // Add missing siblings
-      const existingIds = new Set(data.map(a => parseInt(a.link.match(/anime\/(\d+)/)[1])));
-      for(const fid of matchedFranchiseIds){
-        if(!existingIds.has(fid)){
-          const sib = allAnimeData.find(a => parseInt(a.link.match(/anime\/(\d+)/)[1]) === fid);
-          if(sib) data.push(sib);
-        }
-      }
-    } else {
-      // Weighted scoring search
-      const scored = data.map(a => {
-        let s = 0;
-        if((a.cnTitle||'').toLowerCase()===q)s+=100;
-        else if((a.cnTitle||'').toLowerCase().includes(q))s+=70;
-        if((a.title||'').toLowerCase()===q)s+=90;
-        else if((a.title||'').toLowerCase().includes(q))s+=60;
-        if((a.aliases||[]).some(t=>t.toLowerCase()===q))s+=80;
-        else if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))s+=50;
-        if((a.romaji||'').toLowerCase().includes(q))s+=30;
-        if((a.english||'').toLowerCase().includes(q))s+=25;
-        if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))s+=20;
-        if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))s+=15;
-        if((a.pinyinTokens||[]).length>0){const flat=a.pinyinTokens.join('');let qi=0;for(let ci=0;ci<flat.length&&qi<q.length;ci++){if(flat[ci]===q[qi])qi++}if(qi===q.length)s+=18}
-        if(qTokens&&(a.searchTokens||[]).length>0){const matched=qTokens.filter(qt=>(a.searchTokens||[]).some(st=>st.includes(qt))).length;s+=matched*5}
-        if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))s+=3;
-        if((a.canonicalTitle||'').toLowerCase().includes(q))s+=25;
-        return {a,s};
-      });
-
-      // Franchise boost: if canonicalTitle matched, boost all same canonical entries
-      const ctBoost = new Map();
-      for(const item of scored){
-        if(item.s >= 50 && item.a.canonicalTitle){
-          const ct = item.a.canonicalTitle.toLowerCase();
-          ctBoost.set(ct, Math.max(ctBoost.get(ct)||0, item.s));
-        }
-      }
-      for(const item of scored){
-        if(item.s >= 10 && item.a.canonicalTitle){
-          const boost = ctBoost.get(item.a.canonicalTitle.toLowerCase());
-          if(boost && boost >= 50) item.s += 30;
-        }
-      }
-
-      data = scored.filter(item => item.s > 0).sort((x,y) => y.s - x.s).slice(0, 200).map(item => item.a);
-    }
+    const seen=new Set();
+    data=scored
+      .filter(item=>item.score>=20)
+      .sort((x,y)=>y.score-x.score)
+      .filter(item=>{if(seen.has(item.a.id))return false;seen.add(item.a.id);return true})
+      .slice(0,200)
+      .map(item=>item.a);
   }
   return data;
 }
