@@ -149,9 +149,39 @@ for(const file of TIERS){
     a.searchPinyin=[...new Set(pinyins)].slice(0,5);
     a.searchAbbrev=[...new Set(abbrevs)].slice(0,5);
     a.pinyinTokens=pyTokens;
-    // Pre-compute franchise key from explicit DB only
+
+    // canonicalTitle: strip season/part/movie/ova suffixes only
+    const suffixes=['Season \\d+','Part \\d+','Final Season','Movie','OVA','Specials?','Cour \\d+',
+      '第\\d+期','第\\d+季','第\\d+シリーズ','劇場版','2nd Season','3rd Season','4th Season',
+      'II','III','IV',':.*$','～.*$','　.*$','〜.*$','\\d+st Season','\\d+nd Season','\\d+rd Season','\\d+th Season'];
+    let canon=a.cnTitle||a.title||'';
+    for(const sf of suffixes){
+      const re=new RegExp('\\s*'+sf+'\\s*','gi');
+      canon=canon.replace(re,'').trim();
+    }
+    if(canon.length<2)canon=a.title||'';
+    a.canonicalTitle=canon;
+
+    // franchiseKey from explicit DB
     a.franchiseKey=null;
-    if(adb){a.franchiseKey=aid;} // mark as having franchise data
+    if(adb){a.franchiseKey=aid;}
+
+    // searchTokens: all searchable tokens pre-lowercased
+    const rawTokens=[];
+    if(a.cnTitle)rawTokens.push(a.cnTitle);
+    if(a.title)rawTokens.push(a.title);
+    if(a.romaji)rawTokens.push(a.romaji);
+    if(a.english)rawTokens.push(a.english);
+    if(a.aliases)a.aliases.forEach(t=>rawTokens.push(t));
+    if(a.searchPinyin)a.searchPinyin.forEach(t=>rawTokens.push(t));
+    if(a.searchAbbrev)a.searchAbbrev.forEach(t=>rawTokens.push(t));
+    // Split each into word tokens
+    const tokenSet=new Set();
+    for(const t of rawTokens){
+      tokenSet.add(t.toLowerCase());
+      t.toLowerCase().split(/[\s・\-:]+/).filter(w=>w.length>=1).forEach(w=>tokenSet.add(w));
+    }
+    a.searchTokens=[...tokenSet];
     total++;
   }
 

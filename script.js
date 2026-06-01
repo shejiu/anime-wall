@@ -104,59 +104,78 @@ function applyFilters(){
       return false;
     });
   }
-  // Search — pinyin + abbrev + token matching + franchise
+  // Search — franchise-priority token matching
   if(search){
     const q = search.toLowerCase();
-    const franchiseIds = new Set();
-    data = data.filter(a => {
-      let hit=false;
-      if((a.cnTitle||'').toLowerCase().includes(q))hit=true;
-      else if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
-      else if((a.title||'').toLowerCase().includes(q))hit=true;
-      else if((a.romaji||'').toLowerCase().includes(q))hit=true;
-      else if((a.english||'').toLowerCase().includes(q))hit=true;
-      else if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
-      else if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
-      else if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))hit=true;
-      else if((a.pinyinTokens||[]).length>0){
-        const flat=a.pinyinTokens.join('');let qi2=0;
-        for(let ci=0;ci<flat.length&&qi2<q.length;ci++){if(flat[ci]===q[qi2])qi2++}
-        if(qi2===q.length)hit=true;
-      }
-      if(hit){
-        const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);
-        if(window._franchiseMap){
-          const fIds=window._franchiseMap.get(aid);
-          if(fIds)fIds.forEach(id=>franchiseIds.add(id));
+    const qTokens = q.split(/[\s・\-:]+/).filter(t=>t.length>=1);
+
+    // Phase 1: Check if query matches any franchise alias/key
+    const matchedFranchiseIds = new Set();
+    if(window._franchiseDB){
+      for(const [fKey, fIds] of Object.entries(window._franchiseDB)){
+        if(fKey.toLowerCase().includes(q) || q.includes(fKey.toLowerCase())){
+          fIds.forEach(id => matchedFranchiseIds.add(id));
         }
-        return true;
       }
-      return false;
-    });
-    // Add franchise siblings (only from explicit franchiseMap)
-    if(franchiseIds.size>0){
-      const existingIds=new Set(data.map(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])));
-      for(const fid of franchiseIds){
-        if(existingIds.has(fid))continue;
-        const sib=allAnimeData.find(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])===fid);
-        if(!sib)continue;
-        // Franchise guard: verify sibling shares at least one title word with a matched entry
-        const matchedTitles=data.filter(a=>{
-          const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);
-          const fIds=window._franchiseMap?.get(aid);
-          return fIds&&fIds.includes(fid);
-        });
-        const sharesWord=matchedTitles.some(m=>{
-          const mw=new Set(m.title.replace(/[・\sSeason\dPartFinalMovieOVAⅡⅢⅣⅤⅥ劇場版]/g,'').split(''));
-          const sw=new Set(sib.title.replace(/[・\sSeason\dPartFinalMovieOVAⅡⅢⅣⅤⅥ劇場版]/g,'').split(''));
-          return [...mw].filter(c=>sw.has(c)).length>=3;
-        });
-        if(!sharesWord)continue; // skip cross-franchise contamination
-        let tagOk=true;
-        for(const tag of tags){if(!(sib.tags||[]).includes(tag)&&!(sib.moods||[]).includes(tag)&&!(sib.vibes||[]).includes(tag)&&!(sib.characterTags||[]).includes(tag)){tagOk=false;break}}
-        let decOk=true;
-        if(decades.size>0){const y=sib.seasonYear||parseInt((sib.date||'').slice(0,4))||0;decOk=false;for(const d of decades){if(d===2024){if(y>=2024){decOk=true;break}}else{const g=Math.floor(y/10)*10;if(g===d){decOk=true;break}}}}
-        if(tagOk&&decOk)data.push(sib);
+    }
+
+    if(matchedFranchiseIds.size > 0){
+      // Franchise-priority: ONLY return franchise entries
+      data = data.filter(a => {
+        const aid = parseInt(a.link.match(/anime\/(\d+)/)[1]);
+        return matchedFranchiseIds.has(aid);
+      });
+      // Also include siblings from the map
+      const existingIds = new Set(data.map(a => parseInt(a.link.match(/anime\/(\d+)/)[1])));
+      for(const fid of matchedFranchiseIds){
+        if(!existingIds.has(fid)){
+          const sib = allAnimeData.find(a => parseInt(a.link.match(/anime\/(\d+)/)[1]) === fid);
+          if(sib) data.push(sib);
+        }
+      }
+    } else {
+      // No franchise match → token search
+      const franchiseIds = new Set();
+      data = data.filter(a => {
+        const tokens = a.searchTokens || [];
+        let hit = qTokens.every(qt => tokens.some(st => st.includes(qt)));
+        if(!hit){
+          const allText = tokens.join(' ');
+          if(qTokens.every(qt => allText.includes(qt))) hit = true;
+        }
+        if(!hit && (a.pinyinTokens||[]).length>0){
+          const flat = a.pinyinTokens.join('');
+          let qi=0;
+          for(let ci=0;ci<flat.length&&qi<q.length;ci++){if(flat[ci]===q[qi])qi++}
+          if(qi===q.length)hit=true;
+        }
+        if(hit){
+          const aid = parseInt(a.link.match(/anime\/(\d+)/)[1]);
+          if(window._franchiseMap){
+            const fIds = window._franchiseMap.get(aid);
+            if(fIds)fIds.forEach(id=>franchiseIds.add(id));
+          }
+          return true;
+        }
+        return false;
+      });
+      // Franchise expansion
+      if(franchiseIds.size>0){
+        const existingIds=new Set(data.map(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])));
+        for(const fid of franchiseIds){
+          if(existingIds.has(fid))continue;
+          const sib=allAnimeData.find(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])===fid);
+          if(!sib)continue;
+          const matched=data.find(a=>{const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);return window._franchiseMap?.get(aid)?.includes(fid)});
+          if(matched){
+            const mSet=new Set([...matched.title].filter(c=>/[一-鿿぀-ゟ゠-ヿa-zA-Z]/.test(c)));
+            const sSet=new Set([...sib.title].filter(c=>/[一-鿿぀-ゟ゠-ヿa-zA-Z]/.test(c)));
+            if([...mSet].filter(c=>sSet.has(c)).length<2)continue;
+          }
+          let tagOk=true;for(const tag of tags){if(!(sib.tags||[]).includes(tag)&&!(sib.moods||[]).includes(tag)&&!(sib.vibes||[]).includes(tag)&&!(sib.characterTags||[]).includes(tag)){tagOk=false;break}}
+          let decOk=true;if(decades.size>0){const y=sib.seasonYear||parseInt((sib.date||'').slice(0,4))||0;decOk=false;for(const d of decades){if(d===2024){if(y>=2024){decOk=true;break}}else{const g=Math.floor(y/10)*10;if(g===d){decOk=true;break}}}}
+          if(tagOk&&decOk)data.push(sib);
+        }
       }
     }
   }
