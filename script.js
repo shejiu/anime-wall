@@ -15,14 +15,17 @@ const PRUNE_TO   = 30;      // 回收后保留 ~1.5 屏
 const IMG_CACHE  = new Map();
 let loading      = false;
 
-// ═══ IndexedDB Cache — 第二次访问秒开 ═══
-const DB_NAME='animeWallDB',DB_VER=1,STORE='animeData';
-function openDB(){return new Promise((r,rej)=>{const req=indexedDB.open(DB_NAME,DB_VER);req.onupgradeneeded=e=>{e.target.result.createObjectStore(STORE)};req.onsuccess=e=>r(e.target.result);req.onerror=rej})}
+// ═══ IndexedDB Cache ═══
+const DB_NAME='animeWallDB',DB_VER=2,STORE='animeData';
+function openDB(){return new Promise((r,rej)=>{const req=indexedDB.open(DB_NAME,DB_VER);req.onupgradeneeded=e=>{if(!e.target.result.objectStoreNames.contains(STORE))e.target.result.createObjectStore(STORE)};req.onsuccess=e=>r(e.target.result);req.onerror=rej})}
 async function cacheData(data){try{const db=await openDB();const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(data,'animeData');await new Promise(r=>{tx.oncomplete=r})}catch(e){}}
 async function loadCachedData(){try{const db=await openDB();const tx=db.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get('animeData');return new Promise(r=>{req.onsuccess=e=>r(e.target.result);req.onerror=()=>r(null)})}catch(e){return null}}
 
-// ═══ Data — 动态合并所有 tier ═══
-let allAnimeData = [...window.animeData];
+// ═══ Data — Map 去重，禁止重复 concat ═══
+const animeMap = new Map();
+function mergeAnime(list){for(const a of list){if(a&&a.id)animeMap.set(a.id,a)}return [...animeMap.values()]}
+let allAnimeData = mergeAnime(window.animeData || []);
+let tiersLoaded = false;
 
 function assignRanks(data){
   const sorted = [...data].sort((a,b) => b.score - a.score);
@@ -30,37 +33,35 @@ function assignRanks(data){
 }
 assignRanks(allAnimeData);
 
-const DEFERRED_TIERS = ['data/niche.js', 'data/low-rated.js'];
-
 async function loadDeferredTiers(){
-  // Try IndexedDB first for instant load
+  // IndexedDB first
   const cached = await loadCachedData();
-  if(cached && cached.length > 1000){
-    allAnimeData = cached;
-    window.animeData = cached;
+  if(cached && cached.length > 1000 && cached.length < 5000){
+    allAnimeData = mergeAnime(cached);
     assignRanks(allAnimeData);
     const el = document.getElementById('dataCount');
     if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录 (缓存)';
     filteredData = allAnimeData;
-    // Still load fresh in background
-    loadFreshTiers();
+    if(!tiersLoaded) loadFreshTiers();
     return;
   }
   await loadFreshTiers();
 }
 
 async function loadFreshTiers(){
-  for(const src of DEFERRED_TIERS){
-    try{await new Promise((r,rej)=>{const s=document.createElement('script');s.src=src;s.onload=r;s.onerror=r;document.head.appendChild(s)})}catch(e){}
+  if(tiersLoaded) return;
+  tiersLoaded = true;
+  const DEFERRED = ['data/niche.js','data/low-rated.js'];
+  for(const src of DEFERRED){
+    try{await new Promise((r)=>{const s=document.createElement('script');s.src=src;s.onload=r;s.onerror=r;document.head.appendChild(s)})}catch(e){}
   }
-  if(window._niche?.length){allAnimeData=allAnimeData.concat(window._niche);window.animeData=window.animeData.concat(window._niche)}
-  if(window._low_rated?.length){allAnimeData=allAnimeData.concat(window._low_rated);window.animeData=window.animeData.concat(window._low_rated)}
+  // Merge ALL sources through Map dedup — never concat raw
+  allAnimeData = mergeAnime([...window.animeData, ...(window._niche||[]), ...(window._low_rated||[])]);
   assignRanks(allAnimeData);
-  // Cache to IndexedDB
   cacheData(allAnimeData);
-  const el=document.getElementById('dataCount');
-  if(el)el.textContent='🌈 '+allAnimeData.length.toLocaleString()+' 部收录';
-  filteredData=allAnimeData;cursor=0;exhausted=false;
+  const el = document.getElementById('dataCount');
+  if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录';
+  filteredData = allAnimeData; cursor = 0; exhausted = false;
 }
 
 // ═════════════════════════════════════════════════════
