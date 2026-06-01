@@ -104,12 +104,12 @@ function applyFilters(){
       return false;
     });
   }
-  // Search — franchise-priority token matching
+  // Search — weighted scoring + franchise booster
   if(search){
     const q = search.toLowerCase();
     const qTokens = q.split(/[\s・\-:]+/).filter(t=>t.length>=1);
 
-    // Phase 1: Check if query matches any franchise alias/key
+    // Phase 1: Check franchise match
     const matchedFranchiseIds = new Set();
     if(window._franchiseDB){
       for(const [fKey, fIds] of Object.entries(window._franchiseDB)){
@@ -120,12 +120,9 @@ function applyFilters(){
     }
 
     if(matchedFranchiseIds.size > 0){
-      // Franchise-priority: ONLY return franchise entries
-      data = data.filter(a => {
-        const aid = parseInt(a.link.match(/anime\/(\d+)/)[1]);
-        return matchedFranchiseIds.has(aid);
-      });
-      // Also include siblings from the map
+      // Franchise match: return only franchise entries (sorted by score)
+      data = data.filter(a => matchedFranchiseIds.has(parseInt(a.link.match(/anime\/(\d+)/)[1])));
+      // Add missing siblings
       const existingIds = new Set(data.map(a => parseInt(a.link.match(/anime\/(\d+)/)[1])));
       for(const fid of matchedFranchiseIds){
         if(!existingIds.has(fid)){
@@ -134,49 +131,42 @@ function applyFilters(){
         }
       }
     } else {
-      // No franchise match → token search
-      const franchiseIds = new Set();
-      data = data.filter(a => {
-        const tokens = a.searchTokens || [];
-        let hit = qTokens.every(qt => tokens.some(st => st.includes(qt)));
-        if(!hit){
-          const allText = tokens.join(' ');
-          if(qTokens.every(qt => allText.includes(qt))) hit = true;
-        }
-        if(!hit && (a.pinyinTokens||[]).length>0){
-          const flat = a.pinyinTokens.join('');
-          let qi=0;
-          for(let ci=0;ci<flat.length&&qi<q.length;ci++){if(flat[ci]===q[qi])qi++}
-          if(qi===q.length)hit=true;
-        }
-        if(hit){
-          const aid = parseInt(a.link.match(/anime\/(\d+)/)[1]);
-          if(window._franchiseMap){
-            const fIds = window._franchiseMap.get(aid);
-            if(fIds)fIds.forEach(id=>franchiseIds.add(id));
-          }
-          return true;
-        }
-        return false;
+      // Weighted scoring search
+      const scored = data.map(a => {
+        let s = 0;
+        if((a.cnTitle||'').toLowerCase()===q)s+=100;
+        else if((a.cnTitle||'').toLowerCase().includes(q))s+=70;
+        if((a.title||'').toLowerCase()===q)s+=90;
+        else if((a.title||'').toLowerCase().includes(q))s+=60;
+        if((a.aliases||[]).some(t=>t.toLowerCase()===q))s+=80;
+        else if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))s+=50;
+        if((a.romaji||'').toLowerCase().includes(q))s+=30;
+        if((a.english||'').toLowerCase().includes(q))s+=25;
+        if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))s+=20;
+        if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))s+=15;
+        if((a.pinyinTokens||[]).length>0){const flat=a.pinyinTokens.join('');let qi=0;for(let ci=0;ci<flat.length&&qi<q.length;ci++){if(flat[ci]===q[qi])qi++}if(qi===q.length)s+=18}
+        if(qTokens&&(a.searchTokens||[]).length>0){const matched=qTokens.filter(qt=>(a.searchTokens||[]).some(st=>st.includes(qt))).length;s+=matched*5}
+        if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))s+=3;
+        if((a.canonicalTitle||'').toLowerCase().includes(q))s+=25;
+        return {a,s};
       });
-      // Franchise expansion
-      if(franchiseIds.size>0){
-        const existingIds=new Set(data.map(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])));
-        for(const fid of franchiseIds){
-          if(existingIds.has(fid))continue;
-          const sib=allAnimeData.find(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])===fid);
-          if(!sib)continue;
-          const matched=data.find(a=>{const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);return window._franchiseMap?.get(aid)?.includes(fid)});
-          if(matched){
-            const mSet=new Set([...matched.title].filter(c=>/[一-鿿぀-ゟ゠-ヿa-zA-Z]/.test(c)));
-            const sSet=new Set([...sib.title].filter(c=>/[一-鿿぀-ゟ゠-ヿa-zA-Z]/.test(c)));
-            if([...mSet].filter(c=>sSet.has(c)).length<2)continue;
-          }
-          let tagOk=true;for(const tag of tags){if(!(sib.tags||[]).includes(tag)&&!(sib.moods||[]).includes(tag)&&!(sib.vibes||[]).includes(tag)&&!(sib.characterTags||[]).includes(tag)){tagOk=false;break}}
-          let decOk=true;if(decades.size>0){const y=sib.seasonYear||parseInt((sib.date||'').slice(0,4))||0;decOk=false;for(const d of decades){if(d===2024){if(y>=2024){decOk=true;break}}else{const g=Math.floor(y/10)*10;if(g===d){decOk=true;break}}}}
-          if(tagOk&&decOk)data.push(sib);
+
+      // Franchise boost: if canonicalTitle matched, boost all same canonical entries
+      const ctBoost = new Map();
+      for(const item of scored){
+        if(item.s >= 50 && item.a.canonicalTitle){
+          const ct = item.a.canonicalTitle.toLowerCase();
+          ctBoost.set(ct, Math.max(ctBoost.get(ct)||0, item.s));
         }
       }
+      for(const item of scored){
+        if(item.s >= 10 && item.a.canonicalTitle){
+          const boost = ctBoost.get(item.a.canonicalTitle.toLowerCase());
+          if(boost && boost >= 50) item.s += 30;
+        }
+      }
+
+      data = scored.filter(item => item.s > 0).sort((x,y) => y.s - x.s).slice(0, 200).map(item => item.a);
     }
   }
   return data;
