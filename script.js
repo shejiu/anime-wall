@@ -358,13 +358,17 @@ function buildCard(a){
 // ---- Append cards ----
 function appendCards(n){
   const batch=nextBatch(n),frag=document.createDocumentFragment();
-  for(const a of batch){const div=document.createElement('div');div.innerHTML=buildCard(a);frag.appendChild(div.firstElementChild)}
-  grid.insertBefore(frag,sentinel);
-  // 懒加载封面
+  const newCards=[];
   for(const a of batch){
-    const card=grid.querySelector(`.card[data-src="${a.cover}"]:not([data-loaded])`);
-    if(card) loadCardBg(card);
+    const div=document.createElement('div');
+    div.innerHTML=buildCard(a);
+    const card=div.firstElementChild;
+    frag.appendChild(card);
+    newCards.push(card);
   }
+  grid.insertBefore(frag,sentinel);
+  // 直接对每个新卡片调用 loadCardBg，不用 querySelector
+  for(const card of newCards) loadCardBg(card);
 }
 
 // ---- Prune old cards (简单 FIFO) ----
