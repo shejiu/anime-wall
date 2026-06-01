@@ -1,52 +1,49 @@
 /* ============================================================
-   scripts/addCnTitles.js
-   为 animeData.js 中的每部动漫添加中文标题 + 别名
-   用法: node scripts/addCnTitles.js
+   addCnTitles.js — 为所有 tier 数据添加 cnTitle + aliases
    ============================================================ */
-const fs   = require('fs');
-const path = require('path');
+const fs=require('fs'),path=require('path');
+const CN_MAP=JSON.parse(fs.readFileSync(path.join(__dirname,'cnTitles.json'),'utf8'));
+const DATA_DIR=path.join(__dirname,'..','data');
+const TIERS=['top-rated.js','mainstream.js','niche.js','low-rated.js'];
 
-const DATA_FILE = path.join(__dirname, '..', 'data', 'animeData.js');
-const CN_MAP    = JSON.parse(fs.readFileSync(path.join(__dirname, 'cnTitles.json'), 'utf8'));
+let total=0,withCN=0;
+for(const file of TIERS){
+  const fp=path.join(DATA_DIR,file);
+  if(!fs.existsSync(fp))continue;
+  let raw=fs.readFileSync(fp,'utf8');
+  // Extract variable name
+  const vnMatch=raw.match(/window\.(_\w+)\s*=/);
+  if(!vnMatch){console.log('Skip:',file);continue}
+  const vn=vnMatch[1];
+  // Replace with var for eval
+  let code=raw.replace('window.'+vn+'=','var data=');
+  eval(code);
 
-// Read data
-let raw = fs.readFileSync(DATA_FILE, 'utf8');
-const evalCode = raw.replace('window.animeData', 'var animeData');
-eval(evalCode);
-
-let updated = 0;
-for (const a of animeData) {
-  const aid = a.link.match(/anime\/(\d+)/)[1];
-  const cn = CN_MAP[aid];
-  if (cn) {
-    a.cnTitle = cn.cn;
-    a.aliases = cn.aliases;
-    updated++;
-  } else {
-    // Auto-generate basic aliases from title words
-    const aliases = [];
-    // Add romaji as alias
-    if (a.romaji) aliases.push(a.romaji);
-    // Add first 3 chars of native title as search hint
-    if (a.title && a.title.length >= 2) {
-      const first2 = a.title.substring(0, 2);
-      if (!aliases.includes(first2)) aliases.push(first2);
+  for(const a of data){
+    const aid=a.link.match(/anime\/(\d+)/)[1];
+    const cn=CN_MAP[aid];
+    if(cn){
+      a.cnTitle=cn.cn;
+      a.aliases=cn.aliases;
+      withCN++;
+    }else{
+      // Auto generate aliases from available titles
+      const aliases=[];
+      if(a.romaji){aliases.push(a.romaji);a.romaji.split(' ').filter(w=>w.length>2).forEach(w=>aliases.push(w))}
+      if(a.english)aliases.push(a.english);
+      if(a.title&&a.title.length>=2)aliases.push(a.title);
+      a.cnTitle='';
+      a.aliases=[...new Set(aliases)].slice(0,8);
     }
-    // Add tags as searchable
-    if (a.tags) a.tags.forEach(t => { if (!aliases.includes(t)) aliases.push(t); });
-    a.cnTitle = '';
-    a.aliases = aliases.slice(0, 8);
+    total++;
   }
-}
 
-// Write back
-let out = raw.slice(0, raw.indexOf('window.animeData'));
-out += 'window.animeData = [\n';
-for (const a of animeData) {
-  out += '  ' + JSON.stringify(a) + ',\n';
+  // Rewrite
+  let out=raw.slice(0,raw.indexOf('window.'+vn+'='));
+  out+='window.'+vn+'=[\n';
+  for(const a of data)out+='  '+JSON.stringify(a)+',\n';
+  out+='];\n';
+  fs.writeFileSync(fp,out);
+  console.log(file+': '+data.length+' entries');
 }
-out += '];\n';
-fs.writeFileSync(DATA_FILE, out);
-
-console.log('中文标题映射:', updated, '/', animeData.length);
-console.log('已写入:', DATA_FILE);
+console.log('Total:',total,'| with CN:',withCN);

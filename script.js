@@ -125,7 +125,21 @@ function resetPool(){
   cursor = 0; exhausted = (filteredData.length === 0);
   const cards = grid.querySelectorAll('.card');
   cards.forEach(c => { c.style.backgroundImage = ''; c.remove(); });
-  appendCards(BATCH);
+
+  // Empty state
+  let emptyEl=document.getElementById('emptyState');
+  if(filteredData.length===0){
+    if(!emptyEl){
+      emptyEl=document.createElement('div');
+      emptyEl.id='emptyState';
+      emptyEl.className='empty-state';
+      emptyEl.innerHTML='<span class=\"empty-icon\">🔍</span><h2>NO ANIME FOUND</h2><p>没有找到匹配的动漫</p><p class=\"empty-sub\">请尝试其他关键词或清空筛选</p>';
+      grid.appendChild(emptyEl);
+    }
+  }else{
+    if(emptyEl)emptyEl.remove();
+    appendCards(BATCH);
+  }
   const el = document.getElementById('dataCount');
   if(el) el.textContent = '🌈 ' + filteredData.length.toLocaleString() + ' 部';
 }
@@ -134,14 +148,19 @@ function resetPool(){
 const searchInput = document.getElementById('searchInput');
 const searchClear = document.getElementById('searchClear');
 
+let searchDebounce=null;
 searchInput.addEventListener('input', () => {
-  filterState.search = searchInput.value.trim();
-  searchClear.style.display = filterState.search ? 'block' : 'none';
-  resetPool();
+  clearTimeout(searchDebounce);
+  searchDebounce=setTimeout(()=>{
+    filterState.search = searchInput.value.trim();
+    searchClear.style.display = filterState.search ? 'block' : 'none';
+    resetPool();
+  },150);
 });
 searchClear.addEventListener('click', () => {
   searchInput.value = ''; filterState.search = '';
   searchClear.style.display = 'none';
+  clearTimeout(searchDebounce);
   resetPool();
 });
 
