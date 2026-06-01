@@ -5,6 +5,8 @@
 const fs=require('fs'),path=require('path');
 const DATA_DIR=path.join(__dirname,'..','data');
 const TIERS=['top-rated.js','mainstream.js','niche.js','low-rated.js'];
+// Load community alias database
+const ALIAS_DB=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','anime-aliases.json'),'utf8'));
 
 // Minimal pinyin map for common Chinese chars (covers 99% of use)
 const PY_MAP={
@@ -81,13 +83,19 @@ for(const file of TIERS){
   let code=raw.replace('window.'+vn+'=','var data=');eval(code);
 
   for(const a of data){
+    // Apply community alias database
+    const aid=a.link.match(/anime\/(\d+)/)[1];
+    const adb=ALIAS_DB[aid];
+    if(adb){
+      if(adb.cn)a.cnTitle=adb.cn;
+      if(adb.aliases)a.aliases=[...new Set([...(a.aliases||[]),...adb.aliases])];
+    }
     const terms=[];
-    // Collect all searchable text
     if(a.cnTitle)terms.push(a.cnTitle);
     if(a.title)terms.push(a.title);
     if(a.romaji)terms.push(a.romaji);
     if(a.english)terms.push(a.english);
-    if(a.aliases)terms.forEach(t=>terms.push(t));
+    if(a.aliases)a.aliases.forEach(t=>terms.push(t));
 
     const pinyins=[];
     const abbrevs=[];
