@@ -149,6 +149,9 @@ for(const file of TIERS){
     a.searchPinyin=[...new Set(pinyins)].slice(0,5);
     a.searchAbbrev=[...new Set(abbrevs)].slice(0,5);
     a.pinyinTokens=pyTokens;
+    // Pre-compute franchise key from explicit DB only
+    a.franchiseKey=null;
+    if(adb){a.franchiseKey=aid;} // mark as having franchise data
     total++;
   }
 

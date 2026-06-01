@@ -133,13 +133,25 @@ function applyFilters(){
       }
       return false;
     });
-    // Add franchise siblings
+    // Add franchise siblings (only from explicit franchiseMap)
     if(franchiseIds.size>0){
       const existingIds=new Set(data.map(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])));
       for(const fid of franchiseIds){
         if(existingIds.has(fid))continue;
         const sib=allAnimeData.find(a=>parseInt(a.link.match(/anime\/(\d+)/)[1])===fid);
         if(!sib)continue;
+        // Franchise guard: verify sibling shares at least one title word with a matched entry
+        const matchedTitles=data.filter(a=>{
+          const aid=parseInt(a.link.match(/anime\/(\d+)/)[1]);
+          const fIds=window._franchiseMap?.get(aid);
+          return fIds&&fIds.includes(fid);
+        });
+        const sharesWord=matchedTitles.some(m=>{
+          const mw=new Set(m.title.replace(/[・\sSeason\dPartFinalMovieOVAⅡⅢⅣⅤⅥ劇場版]/g,'').split(''));
+          const sw=new Set(sib.title.replace(/[・\sSeason\dPartFinalMovieOVAⅡⅢⅣⅤⅥ劇場版]/g,'').split(''));
+          return [...mw].filter(c=>sw.has(c)).length>=3;
+        });
+        if(!sharesWord)continue; // skip cross-franchise contamination
         let tagOk=true;
         for(const tag of tags){if(!(sib.tags||[]).includes(tag)&&!(sib.moods||[]).includes(tag)&&!(sib.vibes||[]).includes(tag)&&!(sib.characterTags||[]).includes(tag)){tagOk=false;break}}
         let decOk=true;
