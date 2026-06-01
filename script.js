@@ -9,49 +9,58 @@ const loader   = document.getElementById('loader');
 const scrTop   = document.getElementById('scrollTop');
 
 // ---- Config ----
-const BATCH      = 20;
-const MAX_CARDS  = 160;
-const PRUNE_TO   = 80;
+const BATCH      = 16;
+const MAX_CARDS  = 60;      // 严格上限 — 超过即回收
+const PRUNE_TO   = 30;      // 回收后保留 ~1.5 屏
 const IMG_CACHE  = new Map();
 let loading      = false;
 
-// ═══ Data — 动态合并所有 tier ═══
-let allAnimeData = [...window.animeData]; // 初始 = top-rated + mainstream
+// ═══ IndexedDB Cache — 第二次访问秒开 ═══
+const DB_NAME='animeWallDB',DB_VER=1,STORE='animeData';
+function openDB(){return new Promise((r,rej)=>{const req=indexedDB.open(DB_NAME,DB_VER);req.onupgradeneeded=e=>{e.target.result.createObjectStore(STORE)};req.onsuccess=e=>r(e.target.result);req.onerror=rej})}
+async function cacheData(data){try{const db=await openDB();const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(data,'animeData');await new Promise(r=>{tx.oncomplete=r})}catch(e){}}
+async function loadCachedData(){try{const db=await openDB();const tx=db.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get('animeData');return new Promise(r=>{req.onsuccess=e=>r(e.target.result);req.onerror=()=>r(null)})}catch(e){return null}}
 
-// Assign TOP ranks (score DESC)
+// ═══ Data — 动态合并所有 tier ═══
+let allAnimeData = [...window.animeData];
+
 function assignRanks(data){
   const sorted = [...data].sort((a,b) => b.score - a.score);
   sorted.forEach((a,i) => { if(i < 100) a.rank = i + 1; else delete a.rank; });
 }
 assignRanks(allAnimeData);
 
-// ── 动态加载 niche + low-rated，加载后自动合并 ──
 const DEFERRED_TIERS = ['data/niche.js', 'data/low-rated.js'];
 
 async function loadDeferredTiers(){
+  // Try IndexedDB first for instant load
+  const cached = await loadCachedData();
+  if(cached && cached.length > 1000){
+    allAnimeData = cached;
+    window.animeData = cached;
+    assignRanks(allAnimeData);
+    const el = document.getElementById('dataCount');
+    if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录 (缓存)';
+    filteredData = allAnimeData;
+    // Still load fresh in background
+    loadFreshTiers();
+    return;
+  }
+  await loadFreshTiers();
+}
+
+async function loadFreshTiers(){
   for(const src of DEFERRED_TIERS){
-    try{
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;s.onload = resolve;s.onerror = resolve;
-        document.head.appendChild(s);
-      });
-    }catch(e){/* skip if missing */}
+    try{await new Promise((r,rej)=>{const s=document.createElement('script');s.src=src;s.onload=r;s.onerror=r;document.head.appendChild(s)})}catch(e){}
   }
-  if(window._niche && window._niche.length){
-    allAnimeData = allAnimeData.concat(window._niche);
-    window.animeData = window.animeData.concat(window._niche);
-  }
-  if(window._low_rated && window._low_rated.length){
-    allAnimeData = allAnimeData.concat(window._low_rated);
-    window.animeData = window.animeData.concat(window._low_rated);
-  }
+  if(window._niche?.length){allAnimeData=allAnimeData.concat(window._niche);window.animeData=window.animeData.concat(window._niche)}
+  if(window._low_rated?.length){allAnimeData=allAnimeData.concat(window._low_rated);window.animeData=window.animeData.concat(window._low_rated)}
   assignRanks(allAnimeData);
-  const el = document.getElementById('dataCount');
-  if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录';
-  filteredData = allAnimeData;
-  cursor = 0;
-  exhausted = false;
+  // Cache to IndexedDB
+  cacheData(allAnimeData);
+  const el=document.getElementById('dataCount');
+  if(el)el.textContent='🌈 '+allAnimeData.length.toLocaleString()+' 部收录';
+  filteredData=allAnimeData;cursor=0;exhausted=false;
 }
 
 // ═════════════════════════════════════════════════════
@@ -471,6 +480,47 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){if(dmTimer
 window.addEventListener('scroll',()=>scrTop.classList.toggle('visible',scrollY>500),{passive:true});
 scrTop.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
 
+// ═══ Web Worker Search ═══
+let searchWorker=null;
+function initWorker(){
+  try{
+    searchWorker=new Worker('search-worker.js');
+    searchWorker.onmessage=e=>{
+      if(e.data.type==='RESULTS'){
+        filteredData=e.data.results;
+        cursor=0;exhausted=(filteredData.length===0);
+        const cards=grid.querySelectorAll('.card');
+        cards.forEach(c=>{c.style.backgroundImage='';c.remove()});
+        let emptyEl=document.getElementById('emptyState');
+        if(filteredData.length===0){
+          if(!emptyEl){emptyEl=document.createElement('div');emptyEl.id='emptyState';emptyEl.className='empty-state';emptyEl.innerHTML='<span class=\"empty-icon\">🔍</span><h2>NO ANIME FOUND</h2><p>没有找到匹配的动漫</p>';grid.appendChild(emptyEl)}
+        }else{if(emptyEl)emptyEl.remove();appendCards(BATCH)}
+        const el=document.getElementById('dataCount');
+        if(el)el.textContent='🌈 '+filteredData.length.toLocaleString()+' 部';
+      }
+    };
+  }catch(e){searchWorker=null}
+}
+
+// ═══ Perf Overlay (dev only — ?perf=1) ═══
+if(location.search.includes('perf=1')){
+  const perf=document.createElement('div');
+  perf.id='perfOverlay';
+  perf.style.cssText='position:fixed;bottom:10px;left:10px;z-index:999;background:rgba(0,0,0,.8);color:#0f0;font:11px monospace;padding:6px 10px;border-radius:8px;pointer-events:none';
+  document.body.appendChild(perf);
+  let frames=0,lastPerf=performance.now();
+  function updatePerf(){
+    frames++;const now=performance.now();
+    if(now-lastPerf>=1000){
+      const fps=Math.round(frames/((now-lastPerf)/1000));
+      perf.textContent='FPS:'+fps+' | DOM:'+grid.querySelectorAll('.card').length+' | Data:'+allAnimeData.length;
+      frames=0;lastPerf=now;
+    }
+    requestAnimationFrame(updatePerf);
+  }
+  requestAnimationFrame(updatePerf);
+}
+
 // ═══ Init ═══
 (function init(){
   const el = document.getElementById('dataCount');
@@ -478,6 +528,7 @@ scrTop.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
   filteredData = allAnimeData;
   appendCards(BATCH);
   scheduleDM();
+  initWorker();
 
   // 后台加载剩余 tier
   loadDeferredTiers();
