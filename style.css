@@ -130,8 +130,25 @@ body{
 .search-input::placeholder{color:var(--text-muted)}
 .search-clear{
   position:absolute;right:12px;background:none;border:none;color:var(--text-muted);
-  cursor:pointer;font-size:16px;padding:4px;
+  cursor:pointer;font-size:16px;padding:4px;z-index:2;
 }
+/* Autocomplete dropdown */
+.suggestions{
+  position:absolute;top:100%;left:0;right:0;margin-top:4px;
+  border-radius:16px;overflow:hidden;z-index:100;
+  background:rgba(10,8,24,0.95);border:1px solid var(--glass-border);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+}
+.suggestion-item{
+  padding:10px 16px;cursor:pointer;font-size:13px;color:var(--text);
+  border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:center;gap:8px;
+  transition:background .15s;
+}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.active{background:rgba(179,71,234,0.15)}
+.suggestion-item .sug-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.suggestion-item .sug-score{font-size:10px;color:var(--cyan)}
 /* Tag sections */
 .tag-section{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;flex-wrap:wrap}
 .tag-label{font-size:10px;color:var(--purple);opacity:.6;white-space:nowrap;min-width:28px}

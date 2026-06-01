@@ -38,9 +38,10 @@
     <span class="badge" id="dataCount">🌈 1,496 部收录</span>
   </div>
   <!-- Search + Filter -->
-  <div class="search-bar">
-    <input type="text" class="search-input" id="searchInput" placeholder="🔍  搜索 (中文 / 日文 / 英文 / 罗马音)...">
+  <div class="search-bar" id="searchBar">
+    <input type="text" class="search-input" id="searchInput" placeholder="🔍  搜索 (中文 / 日文 / 英文 / 罗马音)..." autocomplete="off">
     <button class="search-clear" id="searchClear" style="display:none">✕</button>
+    <div class="suggestions" id="suggestions" style="display:none"></div>
   </div>
   <div class="tag-section">
     <span class="tag-label">类型</span>

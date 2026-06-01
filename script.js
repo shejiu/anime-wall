@@ -95,17 +95,34 @@ function applyFilters(){
       return false;
     });
   }
-  // Search
+  // Search — pinyin + abbrev + token matching
   if(search){
     const q = search.toLowerCase();
-    data = data.filter(a =>
-      (a.cnTitle||'').toLowerCase().includes(q)||
-      (a.aliases||[]).some(t=>t.toLowerCase().includes(q))||
-      (a.title||'').toLowerCase().includes(q)||
-      (a.romaji||'').toLowerCase().includes(q)||
-      (a.english||'').toLowerCase().includes(q)||
-      (a.tags||[]).some(t=>t.toLowerCase().includes(q))
-    );
+    data = data.filter(a => {
+      // Direct text match
+      if((a.cnTitle||'').toLowerCase().includes(q))return true;
+      if((a.aliases||[]).some(t=>t.toLowerCase().includes(q)))return true;
+      if((a.title||'').toLowerCase().includes(q))return true;
+      if((a.romaji||'').toLowerCase().includes(q))return true;
+      if((a.english||'').toLowerCase().includes(q))return true;
+      if((a.tags||[]).some(t=>t.toLowerCase().includes(q)))return true;
+      // Pinyin full match
+      if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(q)))return true;
+      // Abbreviation match
+      if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(q)))return true;
+      // Pinyin skip-match: match query chars consecutively against joined tokens
+      if((a.pinyinTokens||[]).length>0){
+        const flat=a.pinyinTokens.join('');
+        if(flat.includes(q))return true;
+        // "zhouhui" → find 'z' then 'h' then 'o' then 'u'... in order within flat
+        let qi=0;
+        for(let ci=0;ci<flat.length&&qi<q.length;ci++){
+          if(flat[ci]===q[qi])qi++;
+        }
+        if(qi===q.length)return true;
+      }
+      return false;
+    });
   }
   return data;
 }
@@ -148,18 +165,83 @@ function resetPool(){
 const searchInput = document.getElementById('searchInput');
 const searchClear = document.getElementById('searchClear');
 
+// ═══ Autocomplete ═══
+const suggestionsEl=document.getElementById('suggestions');
+let selectedIdx=-1;
+
+function getSuggestions(q){
+  const lo=q.toLowerCase();if(!lo)return[];
+  const results=[];
+  for(const a of allAnimeData){
+    let score=0;
+    if((a.cnTitle||'').toLowerCase().includes(lo))score+=10;
+    if((a.title||'').toLowerCase().includes(lo))score+=8;
+    if((a.romaji||'').toLowerCase().includes(lo))score+=6;
+    if((a.english||'').toLowerCase().includes(lo))score+=6;
+    if((a.aliases||[]).some(t=>t.toLowerCase().includes(lo)))score+=5;
+    if((a.searchPinyin||[]).some(t=>t.toLowerCase().includes(lo)))score+=4;
+    if((a.searchAbbrev||[]).some(t=>t.toLowerCase().includes(lo)))score+=3;
+    if(score>0)results.push({a,score});
+  }
+  results.sort((x,y)=>y.score-x.score);
+  return results.slice(0,8);
+}
+
+function showSuggestions(q){
+  const items=getSuggestions(q);
+  if(items.length===0){suggestionsEl.style.display='none';return}
+  suggestionsEl.innerHTML=items.map((item,i)=>
+    `<div class="suggestion-item${i===0?' active':''}" data-idx="${i}">
+      <span class="sug-title">${item.a.cnTitle||item.a.title}</span>
+      <span class="sug-score">⭐${item.a.score.toFixed(1)}</span>
+    </div>`
+  ).join('');
+  suggestionsEl.style.display='block';selectedIdx=0;
+}
+
+function hideSuggestions(){suggestionsEl.style.display='none';selectedIdx=-1}
+
+// Select suggestion
+function selectSuggestion(idx){
+  const items=suggestionsEl.querySelectorAll('.suggestion-item');
+  if(idx<0||idx>=items.length)return;
+  const item=getSuggestions(searchInput.value.trim())[idx];
+  if(item){searchInput.value=item.a.cnTitle||item.a.title;filterState.search=searchInput.value.trim();hideSuggestions();resetPool()}
+}
+
 let searchDebounce=null;
 searchInput.addEventListener('input', () => {
   clearTimeout(searchDebounce);
   searchDebounce=setTimeout(()=>{
     filterState.search = searchInput.value.trim();
     searchClear.style.display = filterState.search ? 'block' : 'none';
+    showSuggestions(filterState.search);
+    if(!filterState.search)hideSuggestions();
     resetPool();
   },150);
 });
+// Keyboard nav
+searchInput.addEventListener('keydown',e=>{
+  const items=suggestionsEl.querySelectorAll('.suggestion-item');
+  if(e.key==='ArrowDown'){e.preventDefault();selectedIdx=Math.min(selectedIdx+1,items.length-1);updateSuggestionHighlight()}
+  else if(e.key==='ArrowUp'){e.preventDefault();selectedIdx=Math.max(selectedIdx-1,0);updateSuggestionHighlight()}
+  else if(e.key==='Enter'){e.preventDefault();selectSuggestion(selectedIdx)}
+  else if(e.key==='Escape'){hideSuggestions();searchInput.blur()}
+});
+function updateSuggestionHighlight(){
+  suggestionsEl.querySelectorAll('.suggestion-item').forEach((el,i)=>el.classList.toggle('active',i===selectedIdx));
+}
+// Click suggestion
+suggestionsEl.addEventListener('click',e=>{
+  const item=e.target.closest('.suggestion-item');if(!item)return;
+  selectSuggestion(parseInt(item.dataset.idx));
+});
+// Click outside
+document.addEventListener('click',e=>{if(!e.target.closest('#searchBar'))hideSuggestions()});
+
 searchClear.addEventListener('click', () => {
   searchInput.value = ''; filterState.search = '';
-  searchClear.style.display = 'none';
+  searchClear.style.display = 'none'; hideSuggestions();
   clearTimeout(searchDebounce);
   resetPool();
 });
