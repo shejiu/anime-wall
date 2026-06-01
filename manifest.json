@@ -1,0 +1,15 @@
+{
+  "name": "Anime Wall — Anime Discovery",
+  "short_name": "Anime Wall",
+  "description": "2,000+ 动漫数据库 · 深夜东京 × 新海诚风",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#080820",
+  "theme_color": "#080820",
+  "orientation": "portrait-primary",
+  "icons": [{
+    "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎌</text></svg>",
+    "sizes": "any",
+    "type": "image/svg+xml"
+  }]
+}

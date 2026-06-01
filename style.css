@@ -1,0 +1,345 @@
+/* ============================================================
+   style.css — 深色霓虹日漫风 · 封面背景 · 毛玻璃 · 标签
+   ============================================================ */
+
+/* ---- Variables ---- */
+:root {
+  --bg: #07071a;
+  --glass-bg: rgba(15,12,30,0.52);
+  --glass-border: rgba(255,255,255,0.07);
+  --text: #f0e6ff;
+  --text-muted: #8a7fa0;
+  --pink: #ff2d95;
+  --cyan: #00e5ff;
+  --purple: #b347ea;
+  --gold: #ffd54f;
+  --sky-deep: #080820;
+  --sky-mid: #0f1038;
+  --sky-top: #161848;
+  --neon-blue: #4a5aff;
+  --neon-purple: #8855ff;
+  --neon-pink: #ff5599;
+  --font: 'Segoe UI','Microsoft YaHei',sans-serif;
+  --font-jp: 'Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif;
+}
+
+/* ---- Reset ---- */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font);background:var(--sky-deep);color:var(--text);
+  min-height:100vh;min-height:100dvh;overflow-x:hidden;line-height:1.5;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-overflow-scrolling:touch;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ═══════════════════════════════════════════════════════
+   干净的新海诚风 — 仅 4 层背景
+   ═══════════════════════════════════════════════════════ */
+
+/* 夜空 + 星光 */
+.night-sky{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(1px 1px at 10% 8%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 25% 12%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1.5px 1.5px at 45% 6%, rgba(255,255,255,0.45), transparent),
+    radial-gradient(1px 1px at 65% 14%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1px 1px at 80% 7%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1.5px 1.5px at 92% 18%, rgba(200,200,255,0.35), transparent),
+    linear-gradient(185deg, #0a0a28 0%, #0d1038 25%, #0b0e32 55%, #080a22 100%);
+  animation: nightPulse 12s ease-in-out infinite;
+}
+@keyframes nightPulse{0%,100%{opacity:1}50%{opacity:.88}}
+
+/* 城市剪影 */
+.city-skyline{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    linear-gradient(180deg,transparent 72%,rgba(8,6,18,0.65) 72%),
+    linear-gradient(180deg,transparent 78%,rgba(6,4,16,0.88) 78%,rgba(6,4,16,0.95) 100%);
+}
+
+/* 轻量 aurora — 仅 2 个光团，无 blur */
+.aurora-layer{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  opacity:.35;
+  background:
+    radial-gradient(ellipse 50% 35% at 15% 30%, rgba(100,60,255,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 80% 25%, rgba(255,80,180,0.06) 0%, transparent 55%);
+  animation: auroraDrift 24s ease-in-out infinite;
+}
+@keyframes auroraDrift{
+  0%,100%{opacity:.30;transform:translate(0,0) scale(1,1)}
+  50%{opacity:.40;transform:translate(1%,-1%) scale(1.03,0.97)}
+}
+
+/* ---- Sakura Canvas ---- */
+.sakura-canvas{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  width:100%;height:100%;
+}
+
+/* ---- Danmaku ---- */
+.danmaku-layer{
+  position:fixed;inset:0;z-index:2;pointer-events:none;overflow:hidden;
+}
+.danmaku{
+  position:absolute;white-space:nowrap;pointer-events:none;
+  animation:danmakuDrift linear forwards;
+  text-shadow:0 0 6px currentColor,0 0 14px currentColor;
+}
+@keyframes danmakuDrift{
+  0%{transform:translateX(106vw);opacity:0}
+  4%{opacity:var(--dm-opacity,0.7)}
+  94%{opacity:var(--dm-opacity,0.5)}
+  100%{transform:translateX(-18vw);opacity:0}
+}
+
+/* ---- Header ---- */
+.site-header{
+  position:relative;z-index:3;text-align:center;
+  padding:50px 20px 24px;
+}
+.title-jp{
+  font-family:var(--font-jp);font-size:clamp(28px,5vw,50px);font-weight:900;
+  letter-spacing:.06em;
+  background:linear-gradient(135deg,var(--pink),var(--cyan),var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 14px rgba(255,45,149,.4));
+}
+.title-cn{
+  font-size:clamp(15px,2.2vw,20px);color:var(--cyan);
+  letter-spacing:.35em;font-weight:300;display:block;margin-top:2px;
+}
+.site-subtitle{margin-top:6px;font-size:12px;color:var(--text-muted);letter-spacing:.15em}
+.header-badges{margin-top:10px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.badge{
+  padding:5px 14px;border-radius:20px;font-size:11px;color:var(--text-muted);
+  background:rgba(15,12,30,0.55);border:1px solid var(--glass-border);
+}
+/* Search */
+.search-bar{position:relative;max-width:480px;margin:14px auto 0;display:flex;align-items:center}
+.search-input{
+  width:100%;padding:10px 40px 10px 16px;border-radius:24px;border:1px solid var(--glass-border);
+  background:rgba(15,12,30,0.55);color:var(--text);font-size:14px;outline:none;
+  transition:border-color .3s;
+}
+.search-input:focus{border-color:var(--purple)}
+.search-input::placeholder{color:var(--text-muted)}
+.search-clear{
+  position:absolute;right:12px;background:none;border:none;color:var(--text-muted);
+  cursor:pointer;font-size:16px;padding:4px;
+}
+/* Tag sections */
+.tag-section{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tag-label{font-size:10px;color:var(--purple);opacity:.6;white-space:nowrap;min-width:28px}
+.tag-filters{display:flex;gap:5px;flex-wrap:wrap}
+.tag-chip{
+  padding:4px 12px;border-radius:16px;font-size:11px;cursor:pointer;
+  background:rgba(15,12,30,0.35);color:var(--text-muted);border:1px solid var(--glass-border);
+  transition:all .2s;white-space:nowrap;user-select:none;
+}
+.tag-chip:hover{border-color:var(--purple);color:var(--text)}
+.tag-chip.active{background:rgba(179,71,234,0.18);border-color:var(--purple);color:var(--purple)}
+
+/* ---- Card Grid ---- */
+.card-grid{
+  position:relative;z-index:3;max-width:1260px;margin:0 auto;
+  padding:0 20px 100px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));
+  gap:22px;
+}
+
+/* ---- Card ---- */
+.card{
+  position:relative;border-radius:16px;overflow:hidden;
+  min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;
+  background:rgba(15,12,30,0.45); /* 纯 rgba，无 blur */
+  border:1px solid var(--glass-border);
+  content-visibility:auto;
+  contain-intrinsic-size:360px 340px;
+  contain:layout style paint;
+  transition:transform .35s ease-out, border-color .35s ease-out;
+  cursor:pointer;
+}
+.card:hover{
+  transform:translateY(-3px) scale(1.015);
+  border-color:rgba(255,255,255,0.14);
+}
+
+/* TOP Rank Badge */
+.rank-badge{
+  position:absolute;top:10px;left:10px;z-index:3;
+  padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700;letter-spacing:.04em;
+  background:linear-gradient(135deg,#facc15,#eab308);color:#1a1200;
+  box-shadow:0 2px 8px rgba(250,200,20,.25),inset 0 1px 0 rgba(255,255,255,.3);
+  text-shadow:0 1px 0 rgba(255,255,255,.2);
+  pointer-events:none;
+}
+.rank-badge.rank-top3{
+  background:linear-gradient(135deg,#fbbf24,#d97706);color:#0f0800;
+  box-shadow:0 3px 12px rgba(250,180,20,.35),inset 0 1px 0 rgba(255,255,255,.35);
+  font-size:11px;padding:4px 12px;
+}
+
+/* ★ Card background-image (set by JS inline) */
+.card[data-src]{
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+}
+.card.bg-loaded{
+  /* loaded state — background visible */
+}
+
+/* Dark gradient overlay — 强力底部遮罩保证文字可读 */
+.card-overlay{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,
+    transparent 0%,
+    rgba(4,4,16,.08) 25%,
+    rgba(4,4,16,.28) 48%,
+    rgba(4,4,16,.55) 62%,
+    rgba(2,2,12,.78) 78%,
+    rgba(0,0,8,.92) 100%
+  );
+}
+.card:hover .card-overlay{
+  background:linear-gradient(180deg,
+    transparent 0%,
+    rgba(4,4,16,.05) 28%,
+    rgba(4,4,16,.22) 50%,
+    rgba(4,4,16,.48) 65%,
+    rgba(2,2,12,.70) 82%,
+    rgba(0,0,8,.88) 100%
+  );
+}
+
+/* Card content */
+.card-body{
+  position:relative;z-index:2;
+  padding:0 18px 16px;display:flex;flex-direction:column;gap:6px;
+}
+.card-title{
+  font-family:var(--font-jp);font-size:17px;font-weight:700;color:#eef2ff;
+  text-shadow:0 2px 10px rgba(0,0,0,.88),0 1px 3px rgba(0,0,0,.6);
+  line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.card-romaji{
+  font-size:10px;color:rgba(255,255,255,.55);margin-top:-3px;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.card-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:rgba(255,255,255,.85)}
+.card-meta span{
+  padding:3px 10px;border-radius:10px;text-shadow:0 1px 3px rgba(0,0,0,.6);
+  background:rgba(15,23,42,.72);border:1px solid rgba(255,255,255,.10);
+}
+
+/* Score — 强阴影保证在任何封面上可读 */
+.card-score{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 12px;border-radius:14px;font-size:13px;font-weight:700;
+  border:1px solid;align-self:flex-start;
+}
+.s-s{color:#ffd54f;border-color:rgba(255,213,79,.35);background:rgba(15,23,42,.65);text-shadow:0 0 10px rgba(255,213,79,.5),0 1px 3px rgba(0,0,0,.7)}
+.s-a{color:#b347ea;border-color:rgba(179,71,234,.35);background:rgba(15,23,42,.65);text-shadow:0 0 8px rgba(179,71,234,.4),0 1px 3px rgba(0,0,0,.7)}
+.s-b{color:#00e5ff;border-color:rgba(0,229,255,.35);background:rgba(15,23,42,.65);text-shadow:0 0 8px rgba(0,229,255,.4),0 1px 3px rgba(0,0,0,.7)}
+.s-c{color:#b0aaca;border-color:rgba(150,140,180,.25);background:rgba(15,23,42,.65);text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.s-d{color:#888;border-color:rgba(120,120,120,.25);background:rgba(15,23,42,.65);text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.card-pop{font-size:10px;color:rgba(255,255,255,.35);margin-left:6px;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+/* Tags — 实色深底 + 白字，任何封面都清晰 */
+.card-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{
+  font-size:10px;padding:3px 10px;border-radius:20px;letter-spacing:.03em;white-space:nowrap;
+  background:rgba(15,23,42,.78);color:#fff;
+  border:1px solid rgba(255,255,255,.10);
+  text-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+/* Mood tags — 粉紫色调，与标签区分 */
+.card-moods{display:flex;gap:5px;flex-wrap:wrap}
+.mood-tag{
+  font-size:9px;padding:2px 8px;border-radius:10px;
+  background:rgba(120,40,90,.40);color:#f0c0e0;
+  border:1px solid rgba(255,120,180,.12);
+  text-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+
+/* AniList link */
+.card-footer{display:flex;justify-content:space-between;align-items:center}
+.anilist-link{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;color:var(--cyan);text-decoration:none;
+  padding:5px 12px;border-radius:14px;
+  border:1px solid rgba(0,229,255,.18);
+  transition:all .3s;
+}
+.anilist-link:hover{
+  background:rgba(0,229,255,.1);box-shadow:0 0 14px rgba(0,229,255,.18);
+}
+
+/* ---- Sentinel ---- */
+.sentinel{width:100%;height:1px;grid-column:1/-1}
+
+/* ---- Loader ---- */
+.loader{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:10;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 24px;border-radius:24px;
+  background:rgba(15,12,30,0.7);border:1px solid var(--glass-border);
+  color:var(--cyan);font-size:11px;letter-spacing:.15em;
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+.loader.visible{opacity:1}
+.loader-ring{
+  width:18px;height:18px;
+  border:2px solid rgba(0,229,255,.2);border-top-color:var(--cyan);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---- Scroll Top ---- */
+.scroll-top{
+  position:fixed;bottom:28px;right:28px;z-index:9;
+  width:44px;height:44px;border-radius:50%;border:none;
+  background:rgba(15,12,30,0.7);border:1px solid var(--glass-border);
+  color:var(--cyan);font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .35s,transform .35s;
+}
+.scroll-top.visible{opacity:1;pointer-events:auto}
+.scroll-top:hover{transform:translateY(-3px);box-shadow:0 0 20px rgba(0,229,255,.2)}
+
+/* ---- Responsive ---- */
+@media(max-width:768px){
+  .card-grid{grid-template-columns:1fr;padding:0 8px 100px;gap:14px}
+  .card{min-height:260px}
+  .site-header{padding:30px 12px 16px}
+  .title-jp{font-size:clamp(22px,6vw,36px)}
+  .title-cn{font-size:13px}
+  .search-bar{max-width:100%;margin:10px 8px 0}
+  .search-input{font-size:16px;padding:10px 36px 10px 14px}
+  .tag-section{flex-wrap:wrap;gap:3px}
+  .tag-chip{padding:3px 9px;font-size:10px}
+  .tag-label{font-size:9px;min-width:22px}
+  .card-title{font-size:15px}
+  .card-body{padding:0 12px 12px;gap:5px}
+  .card-meta{font-size:10px;gap:5px}
+  .card-score{font-size:11px;padding:3px 10px}
+  .rank-badge{font-size:9px;padding:2px 8px;top:8px;left:8px}
+  .rank-badge.rank-top3{font-size:10px;padding:3px 10px}
+  .scroll-top{width:38px;height:38px;bottom:20px;right:16px;font-size:18px}
+  .loader{bottom:20px;padding:8px 18px;font-size:10px}
+}
+@media(max-width:400px){
+  .card-grid{gap:10px}
+  .card{min-height:220px;border-radius:12px}
+  .tag-chip{padding:3px 7px;font-size:9px}
+  .tag-section{gap:2px}
+}
+@media(min-width:1500px){
+  .card-grid{grid-template-columns:repeat(4,1fr)}
+}

@@ -1,0 +1,19 @@
+{
+  "name": "anime-wall",
+  "version": "1.0.0",
+  "description": "Anime Discovery — 2000+ anime database · Tokyo Night × Shinkai Style",
+  "scripts": {
+    "generate": "node scripts/generateAnimeData.js",
+    "download": "node scripts/downloadCovers.js",
+    "optimize": "node scripts/optimizeCovers.js",
+    "fix": "node scripts/fixAnimeCovers.js",
+    "build": "node scripts/generateAnimeData.js && node scripts/downloadCovers.js && node scripts/optimizeCovers.js"
+  },
+  "keywords": ["anime","discovery","database","tokyo-night"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "sharp": "^0.34.5"
+  }
+}

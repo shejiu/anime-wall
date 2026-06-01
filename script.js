@@ -1,0 +1,392 @@
+/* ============================================================
+   script.js — 轻量分页无限滚动 · 固定上限 DOM 回收
+   ============================================================ */
+
+// ---- DOM ----
+const grid     = document.getElementById('cardGrid');
+const sentinel = document.getElementById('sentinel');
+const loader   = document.getElementById('loader');
+const scrTop   = document.getElementById('scrollTop');
+
+// ---- Config ----
+const BATCH      = 20;
+const MAX_CARDS  = 160;
+const PRUNE_TO   = 80;
+const IMG_CACHE  = new Map();
+let loading      = false;
+
+// ═══ Data — 动态合并所有 tier ═══
+let allAnimeData = [...window.animeData]; // 初始 = top-rated + mainstream
+
+// Assign TOP ranks (score DESC)
+function assignRanks(data){
+  const sorted = [...data].sort((a,b) => b.score - a.score);
+  sorted.forEach((a,i) => { if(i < 100) a.rank = i + 1; else delete a.rank; });
+}
+assignRanks(allAnimeData);
+
+// ── 动态加载 niche + low-rated，加载后自动合并 ──
+const DEFERRED_TIERS = ['data/niche.js', 'data/low-rated.js'];
+
+async function loadDeferredTiers(){
+  for(const src of DEFERRED_TIERS){
+    try{
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;s.onload = resolve;s.onerror = resolve;
+        document.head.appendChild(s);
+      });
+    }catch(e){/* skip if missing */}
+  }
+  if(window._niche && window._niche.length){
+    allAnimeData = allAnimeData.concat(window._niche);
+    window.animeData = window.animeData.concat(window._niche);
+  }
+  if(window._low_rated && window._low_rated.length){
+    allAnimeData = allAnimeData.concat(window._low_rated);
+    window.animeData = window.animeData.concat(window._low_rated);
+  }
+  assignRanks(allAnimeData);
+  const el = document.getElementById('dataCount');
+  if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录';
+  filteredData = allAnimeData;
+  cursor = 0;
+  exhausted = false;
+}
+
+// ═════════════════════════════════════════════════════
+//   Unified FilterState — 所有筛选统一管理
+// ═════════════════════════════════════════════════════
+const filterState = {
+  search: '',
+  tags: new Set(),     // genre/mood/vibe tags (AND logic)
+  decades: new Set(),  // 1980,1990,... (OR logic)
+};
+
+// Year → decade group mapping
+function getDecade(year){
+  if(!year||year<1980) return null;
+  return Math.floor(year/10)*10;
+}
+
+let filteredData = allAnimeData;
+let cursor = 0;
+let exhausted = false;
+
+function applyFilters(){
+  let data = allAnimeData;
+  const {search, tags, decades} = filterState;
+
+  // Tag AND — 每条 anime 必须包含所有选中标签
+  for(const tag of tags){
+    data = data.filter(a =>
+      (a.tags||[]).includes(tag)||(a.moods||[]).includes(tag)||
+      (a.vibes||[]).includes(tag)||(a.characterTags||[]).includes(tag)
+    );
+  }
+  // Decade OR — 匹配任何选中年代
+  if(decades.size > 0){
+    data = data.filter(a => {
+      const y = a.seasonYear || parseInt((a.date||'').slice(0,4)) || 0;
+      for(const d of decades){
+        if(d === 2024){ if(y >= 2024) return true; }     // ★ "Recent": 2024+
+        else { const g = getDecade(y); if(g === d) return true; }
+      }
+      return false;
+    });
+  }
+  // Search
+  if(search){
+    const q = search.toLowerCase();
+    data = data.filter(a =>
+      (a.cnTitle||'').toLowerCase().includes(q)||
+      (a.aliases||[]).some(t=>t.toLowerCase().includes(q))||
+      (a.title||'').toLowerCase().includes(q)||
+      (a.romaji||'').toLowerCase().includes(q)||
+      (a.english||'').toLowerCase().includes(q)||
+      (a.tags||[]).some(t=>t.toLowerCase().includes(q))
+    );
+  }
+  return data;
+}
+
+// ═══ 分页 ═══
+function nextBatch(n){
+  if(exhausted) return [];
+  const batch = filteredData.slice(cursor, cursor + n);
+  cursor += batch.length;
+  if(cursor >= filteredData.length) exhausted = true;
+  return batch;
+}
+
+// ═══ 重置池 ═══
+function resetPool(){
+  filteredData = applyFilters();
+  cursor = 0; exhausted = (filteredData.length === 0);
+  const cards = grid.querySelectorAll('.card');
+  cards.forEach(c => { c.style.backgroundImage = ''; c.remove(); });
+  appendCards(BATCH);
+  const el = document.getElementById('dataCount');
+  if(el) el.textContent = '🌈 ' + filteredData.length.toLocaleString() + ' 部';
+}
+
+// ═══ 事件委托 — 所有 chip 点击统一走 header ═══
+const searchInput = document.getElementById('searchInput');
+const searchClear = document.getElementById('searchClear');
+
+searchInput.addEventListener('input', () => {
+  filterState.search = searchInput.value.trim();
+  searchClear.style.display = filterState.search ? 'block' : 'none';
+  resetPool();
+});
+searchClear.addEventListener('click', () => {
+  searchInput.value = ''; filterState.search = '';
+  searchClear.style.display = 'none';
+  resetPool();
+});
+
+// Unified chip click via event delegation on header
+const siteHeader = document.querySelector('.site-header');
+if(siteHeader){
+  siteHeader.addEventListener('click', e => {
+    const chip = e.target.closest('.tag-chip'); if(!chip) return;
+    e.stopPropagation();
+
+    // ── Decade chips ──
+    const decade = chip.dataset.decade;
+    if(decade !== undefined){
+      const d = parseInt(decade);
+      chip.classList.toggle('active');
+      if(chip.classList.contains('active')) filterState.decades.add(d);
+      else filterState.decades.delete(d);
+      resetPool();
+      return;
+    }
+
+    // ── Tag chips ──
+    const tag = chip.dataset.tag;
+    if(tag !== undefined){
+      const group = chip.closest('.tag-filters');
+      if(tag === ''){
+        // "全部" — clear group
+        group.querySelectorAll('.tag-chip').forEach(c => {
+          c.classList.remove('active');
+          if(c.dataset.tag) filterState.tags.delete(c.dataset.tag);
+        });
+        chip.classList.add('active');
+      } else {
+        chip.classList.toggle('active');
+        if(chip.classList.contains('active')) filterState.tags.add(tag);
+        else filterState.tags.delete(tag);
+        // Update "全部" state
+        const allBtn = group.querySelector('.tag-chip[data-tag=""]');
+        if(allBtn){
+          const anyActive = group.querySelectorAll('.tag-chip:not([data-tag=""]).active').length;
+          allBtn.classList.toggle('active', !anyActive);
+        }
+      }
+      resetPool();
+    }
+  });
+}
+
+// ---- Score helpers ----
+function scoreClass(s){if(s>=8.5)return's-s';if(s>=8)return's-a';if(s>=7)return's-b';if(s>=6)return's-c';return's-d'}
+function scoreLabel(s){if(s>=9)return'神作';if(s>=8.5)return'力荐';if(s>=8)return'推荐';if(s>=7)return'不错';if(s>=6)return'还行';return'一般'}
+
+// ---- Tag colors ----
+const tagColors=['#f8bbd0','#b3e5fc','#c8e6c9','#ffe082','#d1c4e9','#ffccbc','#b2dfdb','#f0f4c3','#bbdefb','#e1bee7','#ffab91','#80cbc4','#a5d6a7','#ef9a9a','#80deea','#ce93d8','#ffcc80','#90caf9','#aed581','#ff8a80'];
+function tagColor(i){return tagColors[i%tagColors.length]}
+
+// ---- Build card HTML (innerHTML, 一次性) ----
+function buildCard(a){
+  const sc=scoreClass(a.score),sl=scoreLabel(a.score);
+  const d=a.date?.slice(0,7)||'---',ep=a.episodes===1?'剧场版':`${a.episodes}话`;
+  const tagsHTML=(a.tags||[]).map((t,i)=>`<span class="tag" style="color:${tagColor(i)};border-color:${tagColor(i)}44;background:${tagColor(i)}11">${t}</span>`).join('');
+  const rankBadge=a.rank?`<span class="rank-badge${a.rank<=3?' rank-top3':''}">${a.rank<=3?'👑':''} TOP ${a.rank}</span>`:'';
+  return `<article class="card" data-src="${a.cover}">
+    ${rankBadge}
+    <div class="card-overlay"></div><div class="card-body">
+    <h3 class="card-title">${a.title}</h3>
+    ${a.romaji?`<p class="card-romaji">${a.romaji}</p>`:''}
+    <div class="card-meta"><span>📅 ${d}</span><span>📺 ${ep}</span></div>
+    <span class="card-score ${sc}">⭐ ${Number(a.score).toFixed(1)}</span>
+    ${a.popularity ? `<span class="card-pop">${(a.popularity/1000).toFixed(0)}k users</span>` : ''}
+    ${tagsHTML?`<div class="card-tags">${tagsHTML}</div>`:''}
+    ${a.moods&&a.moods.length?`<div class="card-moods">${a.moods.slice(0,2).map(m=>`<span class="mood-tag">${m}</span>`).join('')}</div>`:''}
+    <div class="card-footer"><span style="font-size:11px;color:var(--text-muted)">${sl}</span><a href="${a.link}" target="_blank" rel="noopener" class="anilist-link">🔗 AniList</a></div>
+    </div></article>`;
+}
+
+// ---- Append cards ----
+function appendCards(n){
+  const batch=nextBatch(n),frag=document.createDocumentFragment();
+  for(const a of batch){const div=document.createElement('div');div.innerHTML=buildCard(a);frag.appendChild(div.firstElementChild)}
+  grid.insertBefore(frag,sentinel);
+  // 懒加载封面
+  for(const a of batch){
+    const card=grid.querySelector(`.card[data-src="${a.cover}"]:not([data-loaded])`);
+    if(card) loadCardBg(card);
+  }
+}
+
+// ---- Prune old cards (简单 FIFO) ----
+function pruneOld(){
+  const cards=grid.querySelectorAll('.card');
+  if(cards.length<=MAX_CARDS)return;
+  const removeCount=cards.length-PRUNE_TO;
+  for(let i=0;i<removeCount;i++){
+    const f=grid.firstElementChild;
+    if(!f||!f.classList.contains('card'))break;
+    f.style.backgroundImage=''; // free GPU texture
+    f.remove();
+  }
+}
+
+// ═══ Cover loading — 三级降级 + 缓存 ═══
+const FALLBACK_FILE='assets/fallback-cover.svg';
+const FALLBACK_INLINE='data:image/svg+xml,'+encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 600 840">'+
+  '<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#08081a"/><stop offset="100%" style="stop-color:#0a0818"/></linearGradient>'+
+  '<filter id="f"><feGaussianBlur stdDeviation="3"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'+
+  '<rect width="600" height="840" fill="url(#g)"/>'+
+  '<rect x="20" y="20" width="560" height="800" rx="20" fill="none" stroke="#ff2d95" stroke-width="1.2" opacity="0.3" stroke-dasharray="12 6"/>'+
+  '<ellipse cx="300" cy="285" rx="35" ry="40" fill="none" stroke="#00e5ff" stroke-width="2.5" opacity="0.55"/>'+
+  '<ellipse cx="286" cy="278" rx="9" ry="11" fill="none" stroke="#00e5ff" stroke-width="2.2" opacity="0.7"/><circle cx="286" cy="278" r="3.5" fill="#00e5ff" opacity="0.8"/>'+
+  '<ellipse cx="314" cy="278" rx="9" ry="11" fill="none" stroke="#00e5ff" stroke-width="2.2" opacity="0.7"/><circle cx="314" cy="278" r="3.5" fill="#00e5ff" opacity="0.8"/>'+
+  '<path d="M 293 300 Q 300 306 307 300" fill="none" stroke="#ff2d95" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>'+
+  '<text x="300" y="430" text-anchor="middle" fill="#ff2d95" font-size="28" font-weight="900" font-family="sans-serif" filter="url(#f)" letter-spacing="4">NO COVER</text>'+
+  '<text x="300" y="515" text-anchor="middle" fill="#8a7fa0" font-size="13" font-family="sans-serif">封面图片暂时不可用</text>'+
+  '</svg>');
+
+function loadCardBg(card){
+  const url=card.dataset.src;
+  if(!url||card.dataset.loaded==='1')return;
+  card.dataset.loaded='1';
+
+  function applyBg(bgUrl){
+    card.style.backgroundImage=`linear-gradient(180deg,transparent 55%,rgba(6,6,15,0.18) 100%),url("${bgUrl}")`;
+    card.style.backgroundSize='cover';card.style.backgroundPosition='center';card.style.backgroundRepeat='no-repeat';
+    card.classList.add('bg-loaded');
+  }
+  if(IMG_CACHE.has(url)){ if(IMG_CACHE.get(url))applyBg(url);else applyBg(FALLBACK_FILE);return }
+  const img=new Image();
+  img.onload=()=>{IMG_CACHE.set(url,true);applyBg(url)};
+  img.onerror=()=>{IMG_CACHE.set(url,false);const fb=new Image();fb.onload=()=>applyBg(FALLBACK_FILE);fb.onerror=()=>applyBg(FALLBACK_INLINE);fb.src=FALLBACK_FILE};
+  img.src=url;
+}
+
+// ═══ Infinite Scroll ═══
+function loadMore(){
+  if(loading || exhausted) return;
+  loading = true;
+  loader.classList.add('visible');
+  requestAnimationFrame(() => {
+    pruneOld();
+    appendCards(BATCH);
+    loading = false;
+    loader.classList.remove('visible');
+    if(!exhausted && sentinel.getBoundingClientRect().top < window.innerHeight + 400){
+      requestAnimationFrame(() => loadMore());
+    }
+  });
+}
+new IntersectionObserver(e => {
+  for(const x of e) if(x.isIntersecting) loadMore();
+}, { rootMargin: '400px' }).observe(sentinel);
+
+// ═══════════════════════════════════════════════════════
+//   Sakura Canvas — 樱花飘落粒子系统
+// ═══════════════════════════════════════════════════════
+const sakuraCanvas=document.getElementById('sakuraCanvas');
+const sakuraCtx=sakuraCanvas.getContext('2d');
+function resizeSakura(){sakuraCanvas.width=window.innerWidth;sakuraCanvas.height=window.innerHeight}
+window.addEventListener('resize',resizeSakura);resizeSakura();
+
+let mouseX=-300,mouseY=-300;
+document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY},{passive:true});
+document.addEventListener('mouseleave',()=>{mouseX=-300;mouseY=-300});
+
+function createPetalSprite(size,color){
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const ctx=c.getContext('2d'),r=size/2;
+  ctx.shadowColor=color;ctx.shadowBlur=size*0.35;ctx.fillStyle=color;
+  for(let i=0;i<5;i++){const a=(i/5)*Math.PI*2-Math.PI/2;const px=r+Math.cos(a)*r*0.46;const py=r+Math.sin(a)*r*0.46;ctx.beginPath();ctx.ellipse(px,py,r*0.37,r*0.15,a,0,Math.PI*2);ctx.fill()}
+  ctx.shadowBlur=0;ctx.beginPath();ctx.arc(r,r,r*0.08,0,Math.PI*2);ctx.fill();
+  return c;
+}
+const SAKURA_COLORS=['#ffb3c1','#ffc2d1','#fbb1c2','#ffd0dc','#ffe0e8','#f8bbd0','#ffccd5','#ffb7c5','#ffd6e0','#fce4ec'];
+const SAKURA_LAYERS=[
+  {count:8, sizeMin:5,sizeMax:10,speedMin:0.25,speedMax:0.55,opMin:0.12,opMax:0.25,blur:2},
+  {count:12,sizeMin:10,sizeMax:18,speedMin:0.45,speedMax:0.80,opMin:0.22,opMax:0.38,blur:0},
+  {count:5, sizeMin:18,sizeMax:26,speedMin:0.65,speedMax:1.10,opMin:0.32,opMax:0.52,blur:0},
+];
+let petals=[],sprites=[],windForce=0,windTarget=0;
+function initPetals(){
+  petals=[];sprites=[];
+  SAKURA_COLORS.forEach(color=>{[18,32,50].forEach(sz=>sprites.push({img:createPetalSprite(sz,color),size:sz}))});
+  let id=0;
+  for(const L of SAKURA_LAYERS){for(let i=0;i<L.count;i++){const spr=sprites[Math.floor(Math.random()*sprites.length)];petals.push({id:id++,x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,size:L.sizeMin+Math.random()*(L.sizeMax-L.sizeMin),speed:L.speedMin+Math.random()*(L.speedMax-L.speedMin),swayAmp:0.6+Math.random()*1.2,swaySpeed:0.3+Math.random()*0.6,opacity:L.opMin+Math.random()*(L.opMax-L.opMin),blur:L.blur,rotation:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*0.015,phase:Math.random()*Math.PI*2,sprite:spr})}}
+}
+initPetals();
+let sakuraLast=performance.now();
+const SAKURA_FPS=30,SAKURA_INTERVAL=1000/SAKURA_FPS;
+function drawSakura(now){
+  if(now-sakuraLast<SAKURA_INTERVAL){requestAnimationFrame(drawSakura);return}
+  const dt=Math.min((now-sakuraLast)/1000,0.1);sakuraLast=now;
+  const w=sakuraCanvas.width,h=sakuraCanvas.height;
+  sakuraCtx.clearRect(0,0,w,h);
+  if(Math.random()<0.003)windTarget=(Math.random()-0.5)*0.6;
+  windForce+=(windTarget-windForce)*0.01;
+  for(const p of petals){
+    p.y+=p.speed*50*dt;const sway=Math.sin(now*0.0008*p.swaySpeed+p.phase)*p.swayAmp;p.x+=sway*dt*25+windForce*dt*35;
+    const dx=p.x-mouseX,dy=p.y-mouseY,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<180){const push=(1-dist/180)*3,angle=Math.atan2(dy,dx);p.x+=Math.cos(angle)*push*dt*50;p.y+=Math.sin(angle)*push*dt*30}
+    p.rotation+=p.rotSpeed*dt*25;
+    if(p.y>h+p.size*2){p.y=-p.size*2;p.x=Math.random()*w}if(p.x>w+p.size*2)p.x=-p.size*2;if(p.x<-p.size*2)p.x=w+p.size*2;
+    const spr=p.sprite,s=p.size;sakuraCtx.save();sakuraCtx.globalAlpha=p.opacity;if(p.blur>0)sakuraCtx.filter=`blur(${p.blur}px)`;sakuraCtx.translate(p.x,p.y);sakuraCtx.rotate(p.rotation);sakuraCtx.drawImage(spr.img,-s/2,-s/2,s,s);sakuraCtx.restore();
+  }
+  requestAnimationFrame(drawSakura);
+}
+requestAnimationFrame(drawSakura);
+window.addEventListener('resize',()=>{resizeSakura();for(const p of petals){p.x=Math.random()*sakuraCanvas.width;p.y=Math.random()*sakuraCanvas.height}});
+
+// ═══ Kaomoji Danmaku ═══
+const dmLayer=document.getElementById('danmakuLayer'),MAX_DM=7;
+function spawnDanmaku(){
+  if(document.hidden||dmLayer.children.length>=MAX_DM)return;
+  const el=document.createElement('span');el.className='danmaku';
+  el.textContent=kaomojiPool[Math.floor(Math.random()*kaomojiPool.length)];
+  el.style.top=(6+Math.random()*80)+'%';el.style.fontSize=(14+Math.random()*18)+'px';
+  el.style.setProperty('--dm-opacity',(0.35+Math.random()*0.35).toFixed(2));
+  el.style.animationDuration=(10+Math.random()*14)+'s';
+  dmLayer.appendChild(el);setTimeout(()=>el.remove(),26000);
+}
+let dmTimer=null;
+function scheduleDM(){if(dmTimer)clearTimeout(dmTimer);if(document.hidden)return;spawnDanmaku();dmTimer=setTimeout(scheduleDM,2200+Math.random()*3000)}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){if(dmTimer){clearTimeout(dmTimer);dmTimer=null}}else scheduleDM()});
+
+// ═══ Scroll Top ═══
+window.addEventListener('scroll',()=>scrTop.classList.toggle('visible',scrollY>500),{passive:true});
+scrTop.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
+
+// ═══ Init ═══
+(function init(){
+  const el = document.getElementById('dataCount');
+  if(el) el.textContent = '🌈 ' + allAnimeData.length.toLocaleString() + ' 部收录';
+  filteredData = allAnimeData;
+  appendCards(BATCH);
+  scheduleDM();
+
+  // 后台加载剩余 tier
+  loadDeferredTiers();
+
+  // Register Service Worker (PWA)
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if(!exhausted && sentinel.getBoundingClientRect().top < window.innerHeight + 400) loadMore();
+  }));
+})();

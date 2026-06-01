@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Anime Wall — Anime Discovery 动漫时光墙</title>
+<meta name="description" content="Anime Discovery — 2,000+ 动漫数据库，深夜东京 × 新海诚风。搜索、标签筛选、年份筛选、TOP 榜单。">
+<meta name="theme-color" content="#080820">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎌</text></svg>">
+<meta property="og:title" content="Anime Wall — Anime Discovery">
+<meta property="og:description" content="2,000+ 动漫数据库 · 深夜东京 × 新海诚风">
+<meta property="og:type" content="website">
+<meta property="og:image" content="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='630'><rect width='1200' height='630' fill='%23080820'/><text x='600' y='300' text-anchor='middle' fill='%23ff2d95' font-size='60' font-weight='bold'>ANIME WALL</text><text x='600' y='370' text-anchor='middle' fill='%238a7fa0' font-size='30'>Anime Discovery</text></svg>">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 干净的新海诚风 — 仅 4 层 -->
+<div class="night-sky"></div>
+<div class="city-skyline"></div>
+<div class="aurora-layer" aria-hidden="true"></div>
+<canvas class="sakura-canvas" id="sakuraCanvas"></canvas>
+
+<!-- Danmaku -->
+<div class="danmaku-layer" id="danmakuLayer"></div>
+
+<!-- Header -->
+<header class="site-header">
+  <h1>
+    <span class="title-jp">アニメウォール</span>
+    <span class="title-cn">动漫时光墙</span>
+  </h1>
+  <p class="site-subtitle">Anime Discovery · AniList Database</p>
+  <div class="header-badges">
+    <span class="badge" id="dataCount">🌈 1,496 部收录</span>
+  </div>
+  <!-- Search + Filter -->
+  <div class="search-bar">
+    <input type="text" class="search-input" id="searchInput" placeholder="🔍  搜索 (中文 / 日文 / 英文 / 罗马音)...">
+    <button class="search-clear" id="searchClear" style="display:none">✕</button>
+  </div>
+  <div class="tag-section">
+    <span class="tag-label">类型</span>
+    <div class="tag-filters" data-group="genres">
+      <button class="tag-chip active" data-tag="">全部</button>
+      <button class="tag-chip" data-tag="动作">⚔️ 动作</button>
+      <button class="tag-chip" data-tag="喜剧">😄 喜剧</button>
+      <button class="tag-chip" data-tag="剧情">🎭 剧情</button>
+      <button class="tag-chip" data-tag="奇幻">✨ 奇幻</button>
+      <button class="tag-chip" data-tag="恋爱">💕 恋爱</button>
+      <button class="tag-chip" data-tag="科幻">🚀 科幻</button>
+      <button class="tag-chip" data-tag="异世界">🌌 异世界</button>
+      <button class="tag-chip" data-tag="日常">🍵 日常</button>
+      <button class="tag-chip" data-tag="悬疑">🔍 悬疑</button>
+    </div>
+  </div>
+  <div class="tag-section">
+    <span class="tag-label">情绪</span>
+    <div class="tag-filters" data-group="moods">
+      <button class="tag-chip" data-tag="治愈">🌸 治愈</button>
+      <button class="tag-chip" data-tag="热血">🔥 热血</button>
+      <button class="tag-chip" data-tag="轻松欢乐">😊 轻松</button>
+      <button class="tag-chip" data-tag="深刻">🤔 深刻</button>
+      <button class="tag-chip" data-tag="浪漫">💝 浪漫</button>
+      <button class="tag-chip" data-tag="青春日常">🏫 青春</button>
+      <button class="tag-chip" data-tag="悬疑紧张">🔦 紧张</button>
+    </div>
+  </div>
+  <div class="tag-section">
+    <span class="tag-label">氛围</span>
+    <div class="tag-filters" data-group="vibes">
+      <button class="tag-chip" data-tag="神作">👑 神作</button>
+      <button class="tag-chip" data-tag="好评">⭐ 好评</button>
+      <button class="tag-chip" data-tag="人气">🔥 人气</button>
+      <button class="tag-chip" data-tag="经典">📜 经典</button>
+      <button class="tag-chip" data-tag="新番">🆕 新番</button>
+      <button class="tag-chip" data-tag="剧场版">🎬 剧场版</button>
+      <button class="tag-chip" data-tag="长篇">📺 长篇</button>
+    </div>
+  </div>
+  <div class="tag-section">
+    <span class="tag-label">年代</span>
+    <div class="tag-filters" data-group="decade">
+      <button class="tag-chip" data-decade="1980">📼 80s</button>
+      <button class="tag-chip" data-decade="1990">💾 90s</button>
+      <button class="tag-chip" data-decade="2000">💿 00s</button>
+      <button class="tag-chip" data-decade="2010">📀 10s</button>
+      <button class="tag-chip" data-decade="2020">🆕 20s</button>
+      <button class="tag-chip" data-decade="2024">🆕 Recent</button>
+    </div>
+  </div>
+</header>
+
+<!-- Card Grid -->
+<main class="card-grid" id="cardGrid">
+  <div class="sentinel" id="sentinel"></div>
+</main>
+
+<!-- Loader -->
+<div class="loader" id="loader">
+  <div class="loader-ring"></div>
+  <span>LOADING...</span>
+</div>
+
+<!-- Scroll Top -->
+<button class="scroll-top" id="scrollTop" title="回到顶部">↑</button>
+
+<!-- Scripts -->
+<script src="data/top-rated.js"></script>
+<script src="data/mainstream.js"></script>
+<script src="data/animeData.js"></script>
+<script src="assets/emoji.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
